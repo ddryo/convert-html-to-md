@@ -159,6 +159,8 @@
                 while (el.firstChild) {
                     parent.insertBefore(el.firstChild, el);
                 }
+                // span/divの除去跡にスペースを入れる（文字詰まり防止）
+                parent.insertBefore(doc.createTextNode(' '), el);
                 parent.removeChild(el);
             });
 
@@ -384,13 +386,20 @@
                     case 'td':
                         return childMd();
 
-                    default:
-                        return childMd();
+                    default: {
+                        const content = childMd();
+                        // 未処理タグの前後で文字詰まりを防ぐためスペースを追加
+                        return content ? ` ${content} ` : '';
+                    }
                 }
             }
 
             md = walk(root).trim();
             md = md.replace(/\n{3,}/g, '\n\n');
+            // 連続スペースを1つにまとめる（ただし改行前の2スペースは維持）
+            md = md.replace(/  \n/g, '\u0000');  // 一時的に置換
+            md = md.replace(/ {2,}/g, ' ');       // 連続スペースを1つに
+            md = md.replace(/\u0000/g, '  \n');  // 元に戻す
             return md;
         }
 
