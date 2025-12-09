@@ -119,6 +119,11 @@
     <div class="controls">
         <button id="convertBtn">変換する</button>
         <button id="copyBtn" class="secondary">Markdown をコピー</button>
+        <label
+            style="margin-left: auto; display: flex; align-items: center; gap: .4rem; font-size: .85rem; cursor: pointer; user-select: none;">
+            <input type="checkbox" id="noEscapeCheckbox">
+            テキスト内のマークダウンをエスケープしない
+        </label>
     </div>
 
     <div class="container">
@@ -160,17 +165,20 @@
             return body;
         }
 
-        function htmlToMarkdown(html) {
+        function htmlToMarkdown(html, options = {}) {
             const root = preprocessHTML(html);
             let md = '';
 
             function escapeText(text) {
-                return text
-                    .replace(/\\/g, '\\\\')
-                    .replace(/`/g, '\\`')
-                    .replace(/\*/g, '\\*')
-                    .replace(/_/g, '\\_')
-                    .replace(/\|/g, '\\|');
+                let res = text.replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
+
+                if (!options.noEscape) {
+                    res = res
+                        .replace(/`/g, '\\`')
+                        .replace(/\*/g, '\\*')
+                        .replace(/_/g, '\\_');
+                }
+                return res;
             }
 
             function walk(node, context = {}) {
@@ -296,6 +304,20 @@
                         return `${indentStr}- ${content}\n`;
                     }
 
+                    // 定義リスト
+                    case 'dl':
+                        return childMd();
+
+                    case 'dt': {
+                        const content = childMd().trim();
+                        return content ? `\n\n**${content}**\n` : '';
+                    }
+
+                    case 'dd': {
+                        const content = childMd().trim();
+                        return content ? `${content}\n\n` : '';
+                    }
+
                     // リンク
                     case 'a': {
                         const href = node.getAttribute('href') || '';
@@ -376,10 +398,14 @@
         const outputEl = document.getElementById('output');
         const convertBtn = document.getElementById('convertBtn');
         const copyBtn = document.getElementById('copyBtn');
+        const noEscapeCheckbox = document.getElementById('noEscapeCheckbox');
 
         convertBtn.addEventListener('click', () => {
             const html = inputEl.value || '';
-            outputEl.value = html ? htmlToMarkdown(html) : '';
+            const options = {
+                noEscape: noEscapeCheckbox.checked
+            };
+            outputEl.value = html ? htmlToMarkdown(html, options) : '';
         });
 
         copyBtn.addEventListener('click', async () => {
