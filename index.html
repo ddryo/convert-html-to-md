@@ -105,6 +105,86 @@
             filter: brightness(1.05);
         }
 
+        .convert-btn {
+            display: block;
+            width: 100%;
+            max-width: 400px;
+            margin: 1.5rem auto;
+            padding: 1rem 2rem;
+            font-size: 1.25rem;
+            font-weight: 600;
+            background: linear-gradient(135deg, #2563eb, #1d4ed8);
+            box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .convert-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(37, 99, 235, 0.45);
+            filter: brightness(1.08);
+        }
+
+        .convert-btn:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        .conversion-info {
+            max-width: 600px;
+            margin: 0 auto 1.5rem;
+            padding: 0.75rem 1rem;
+            background: #f0f4f8;
+            border-radius: 0.5rem;
+            font-size: 1em;
+            color: #555;
+        }
+
+        .conversion-info ul {
+            margin: 0;
+            padding-left: 1.25rem;
+        }
+
+        .conversion-info li {
+            margin: 0.2rem 0;
+        }
+
+        .options-row {
+            display: flex;
+            gap: .5rem;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1rem;
+        }
+
+        .output-wrapper {
+            position: relative;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .output-wrapper textarea {
+            cursor: pointer;
+        }
+
+        .copy-toast {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            padding: 0.5rem 1rem;
+            border-radius: 0.4rem;
+            font-size: 0.85rem;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+        }
+
+        .copy-toast.show {
+            opacity: 1;
+        }
+
         @media (max-width: 800px) {
             .container {
                 grid-template-columns: 1fr;
@@ -116,31 +196,47 @@
 <body>
     <h1>HTML → Markdown 変換ツール</h1>
 
-    <div class="controls">
-        <button id="convertBtn">変換する</button>
-        <button id="copyBtn" class="secondary">Markdown をコピー</button>
-        <label
-            style="margin-left: auto; display: flex; align-items: center; gap: .4rem; font-size: .85rem; cursor: pointer; user-select: none;">
-            <input type="checkbox" id="noEscapeCheckbox">
-            テキスト内のマークダウンをエスケープしない
-        </label>
-    </div>
-
     <div class="container">
         <div class="panel">
             <div class="panel-header">
                 <span>入力 HTML</span>
-                <small>span / div は除去して構造だけ残します</small>
             </div>
             <textarea id="input" placeholder="ここに HTML を貼り付けてください"></textarea>
         </div>
         <div class="panel">
             <div class="panel-header">
                 <span>出力 Markdown</span>
-                <small>pre → ```、code / strong 等を変換</small>
+                <small>クリックでコピー</small>
             </div>
-            <textarea id="output" readonly placeholder="変換結果がここに表示されます"></textarea>
+            <div class="output-wrapper">
+                <textarea id="output" readonly placeholder="変換結果がここに表示されます"></textarea>
+                <div class="copy-toast" id="copyToast">コピーしました！</div>
+            </div>
         </div>
+    </div>
+
+    <div class="options-row">
+        <label
+            style="display: flex; align-items: center; gap: .4rem; font-size: .85rem; cursor: pointer; user-select: none;">
+            <input type="checkbox" id="noEscapeCheckbox">
+            テキスト内のマークダウンをエスケープしない
+        </label>
+    </div>
+
+    <button id="convertBtn" class="convert-btn">変換する</button>
+
+    <div class="conversion-info">
+        <ul>
+            <li><code>span</code> / <code>div</code> → 除去（構造のみ残す）</li>
+            <li><code>pre</code> → <code>```</code> コードブロック</li>
+            <li><code>code</code> → <code>`インラインコード`</code></li>
+            <li><code>b</code> / <code>strong</code> → <code>**太字**</code></li>
+            <li><code>i</code> / <code>em</code> → <code>*斜体*</code></li>
+            <li><code>a</code> → <code>[リンク](URL)</code></li>
+            <li><code>h1</code>〜<code>h6</code> → <code># 見出し</code></li>
+            <li><code>ul</code> / <code>ol</code> → 箇条書き / 番号リスト</li>
+            <li><code>table</code> → Markdown テーブル</li>
+        </ul>
     </div>
 
     <script>
@@ -406,7 +502,7 @@
         const inputEl = document.getElementById('input');
         const outputEl = document.getElementById('output');
         const convertBtn = document.getElementById('convertBtn');
-        const copyBtn = document.getElementById('copyBtn');
+        const copyToast = document.getElementById('copyToast');
         const noEscapeCheckbox = document.getElementById('noEscapeCheckbox');
 
         convertBtn.addEventListener('click', () => {
@@ -417,14 +513,15 @@
             outputEl.value = html ? htmlToMarkdown(html, options) : '';
         });
 
-        copyBtn.addEventListener('click', async () => {
+        // 出力テキストエリアをクリックでコピー
+        outputEl.addEventListener('click', async () => {
             const text = outputEl.value;
             if (!text) return;
             try {
                 await navigator.clipboard.writeText(text);
-                copyBtn.textContent = 'コピーしました';
+                copyToast.classList.add('show');
                 setTimeout(() => {
-                    copyBtn.textContent = 'Markdown をコピー';
+                    copyToast.classList.remove('show');
                 }, 1200);
             } catch (e) {
                 alert('クリップボードへのコピーに失敗しました。');
