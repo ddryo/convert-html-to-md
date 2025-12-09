@@ -2,7 +2,7 @@
 
 HTML を Markdown に変換するシンプルな Web ツールです。
 
-🌐 **公開URL**: https://ddryo.github.io/convert-html-to-md/
+🌐 **公開 URL**: https://ddryo.github.io/convert-html-to-md/
 
 ## 機能
 

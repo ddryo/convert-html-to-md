@@ -169,7 +169,8 @@
                     .replace(/\\/g, '\\\\')
                     .replace(/`/g, '\\`')
                     .replace(/\*/g, '\\*')
-                    .replace(/_/g, '\\_');
+                    .replace(/_/g, '\\_')
+                    .replace(/\|/g, '\\|');
             }
 
             function walk(node, context = {}) {
@@ -207,6 +208,13 @@
                         const content = children.map(child => walk(child, context)).join('').trim();
                         if (!content) return '';
                         return `\n\n${content}\n\n`;
+                    }
+
+                    // 引用
+                    case 'blockquote': {
+                        const content = children.map(child => walk(child, context)).join('').trim();
+                        if (!content) return '';
+                        return `\n\n> ${content.replace(/\n/g, '\n> ')}\n\n`;
                     }
 
                     // 改行
@@ -253,19 +261,21 @@
 
                     // 箇条書き
                     case 'ul': {
+                        const indent = context.indent || 0;
                         const items = children
                             .filter(c => c.nodeType === Node.ELEMENT_NODE && c.tagName.toLowerCase() === 'li')
-                            .map(li => walk(li, { ...context, listType: 'ul' }))
+                            .map(li => walk(li, { ...context, listType: 'ul', indent: indent + 1 }))
                             .join('');
                         return `\n${items}\n`;
                     }
 
                     case 'ol': {
+                        const indent = context.indent || 0;
                         let index = 1;
                         const items = children
                             .filter(c => c.nodeType === Node.ELEMENT_NODE && c.tagName.toLowerCase() === 'li')
                             .map(li => {
-                                const content = walk(li, { ...context, listType: 'ol', listIndex: index });
+                                const content = walk(li, { ...context, listType: 'ol', listIndex: index, indent: indent + 1 });
                                 index++;
                                 return content;
                             })
@@ -276,11 +286,14 @@
                     case 'li': {
                         const content = children.map(child => walk(child, context)).join('').trim();
                         if (!content) return '';
+                        const indentLevel = (context.indent ? context.indent - 1 : 0);
+                        const indentStr = '  '.repeat(indentLevel);
+
                         if (context.listType === 'ol') {
                             const num = context.listIndex ?? 1;
-                            return `${num}. ${content}\n`;
+                            return `${indentStr}${num}. ${content}\n`;
                         }
-                        return `- ${content}\n`;
+                        return `${indentStr}- ${content}\n`;
                     }
 
                     // リンク
@@ -302,6 +315,52 @@
                         if (!src) return '';
                         return `![${alt}](${src})`;
                     }
+
+                    // テーブル
+                    case 'table': {
+                        const rows = Array.from(node.querySelectorAll('tr'));
+                        if (rows.length === 0) return '';
+
+                        let tableMd = '\n\n';
+
+                        // ヘッダー処理
+                        const headerRow = rows.find(r => r.querySelector('th'));
+                        let colCount = 0;
+
+                        if (headerRow) {
+                            const cells = Array.from(headerRow.querySelectorAll('th, td'));
+                            colCount = cells.length;
+                            tableMd += '| ' + cells.map(c => walk(c, context).trim()).join(' | ') + ' |\n';
+                            tableMd += '| ' + Array(colCount).fill('---').join(' | ') + ' |\n';
+                        }
+
+                        // データ行処理
+                        rows.forEach(row => {
+                            if (row === headerRow) return; // ヘッダーはスキップ
+                            const cells = Array.from(row.querySelectorAll('td, th'));
+                            if (colCount === 0) colCount = cells.length; // ヘッダーがない場合の列数特定
+
+                            // 列数が足りない場合は空セルで埋める
+                            const rowContent = cells.map(c => walk(c, context).trim());
+                            while (rowContent.length < colCount) rowContent.push('');
+
+                            tableMd += '| ' + rowContent.join(' | ') + ' |\n';
+                        });
+
+                        return tableMd + '\n';
+                    }
+
+                    case 'thead':
+                    case 'tbody':
+                    case 'tfoot':
+                        return childMd();
+
+                    case 'tr':
+                        return '';
+
+                    case 'th':
+                    case 'td':
+                        return childMd();
 
                     default:
                         return childMd();
