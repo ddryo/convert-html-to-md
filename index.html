@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <title>HTML → Markdown 変換ツール</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 1rem;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #f5f5f7;
+            color: #222;
+        }
+
+        h1 {
+            font-size: 1.2rem;
+            margin: 0 0 .75rem;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            align-items: stretch;
+        }
+
+        .panel {
+            display: flex;
+            flex-direction: column;
+            background: #fff;
+            border-radius: .5rem;
+            box-shadow: 0 0 0 1px rgba(0, 0, 0, .04);
+            padding: .75rem;
+            min-height: 50vh;
+        }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: .5rem;
+            font-size: .85rem;
+            color: #555;
+        }
+
+        .panel-header span {
+            font-weight: 600;
+        }
+
+        textarea {
+            width: 100%;
+            flex: 1;
+            resize: vertical;
+            border-radius: .35rem;
+            border: 1px solid #d0d0d5;
+            padding: .5rem .6rem;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            font-size: .85rem;
+            background: #fafafa;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: #2563eb;
+            box-shadow: 0 0 0 1px rgba(37, 99, 235, .3);
+            background: #fff;
+        }
+
+        .controls {
+            display: flex;
+            gap: .5rem;
+            align-items: center;
+            margin: .75rem 0;
+        }
+
+        button {
+            border: none;
+            border-radius: .4rem;
+            padding: .4rem .8rem;
+            font-size: .85rem;
+            cursor: pointer;
+            background: #2563eb;
+            color: #fff;
+            display: inline-flex;
+            align-items: center;
+            gap: .35rem;
+        }
+
+        button:disabled {
+            opacity: .5;
+            cursor: default;
+        }
+
+        button.secondary {
+            background: #e5e7eb;
+            color: #111827;
+        }
+
+        button:hover:not(:disabled) {
+            filter: brightness(1.05);
+        }
+
+        @media (max-width: 800px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <h1>HTML → Markdown 変換ツール</h1>
+
+    <div class="controls">
+        <button id="convertBtn">変換する</button>
+        <button id="copyBtn" class="secondary">Markdown をコピー</button>
+    </div>
+
+    <div class="container">
+        <div class="panel">
+            <div class="panel-header">
+                <span>入力 HTML</span>
+                <small>span / div は除去して構造だけ残します</small>
+            </div>
+            <textarea id="input" placeholder="ここに HTML を貼り付けてください"></textarea>
+        </div>
+        <div class="panel">
+            <div class="panel-header">
+                <span>出力 Markdown</span>
+                <small>pre → ```、code / strong 等を変換</small>
+            </div>
+            <textarea id="output" readonly placeholder="変換結果がここに表示されます"></textarea>
+        </div>
+    </div>
+
+    <script>
+        function preprocessHTML(html) {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            const body = doc.body;
+
+            // script, style は完全削除
+            doc.querySelectorAll('script, style').forEach(el => el.remove());
+
+            // span, div を unwrap（要素だけ消して子を親に移動）
+            doc.querySelectorAll('span, div').forEach(el => {
+                const parent = el.parentNode;
+                if (!parent) return;
+                while (el.firstChild) {
+                    parent.insertBefore(el.firstChild, el);
+                }
+                parent.removeChild(el);
+            });
+
+            return body;
+        }
+
+        function htmlToMarkdown(html) {
+            const root = preprocessHTML(html);
+            let md = '';
+
+            function escapeText(text) {
+                return text
+                    .replace(/\\/g, '\\\\')
+                    .replace(/`/g, '\\`')
+                    .replace(/\*/g, '\\*')
+                    .replace(/_/g, '\\_');
+            }
+
+            function walk(node, context = {}) {
+                if (node.nodeType === Node.TEXT_NODE) {
+                    const text = node.textContent.replace(/\s+/g, ' ');
+                    if (!text.trim()) return '';
+                    return escapeText(text);
+                }
+
+                if (node.nodeType !== Node.ELEMENT_NODE) {
+                    return '';
+                }
+
+                const tag = node.tagName.toLowerCase();
+                const children = Array.from(node.childNodes);
+
+                const childMd = () => children.map(child => walk(child, context)).join('');
+
+                switch (tag) {
+                    // 見出し
+                    case 'h1':
+                    case 'h2':
+                    case 'h3':
+                    case 'h4':
+                    case 'h5':
+                    case 'h6': {
+                        const level = parseInt(tag[1], 10);
+                        const hashes = '#'.repeat(level);
+                        const content = children.map(child => walk(child, context)).join('').trim();
+                        return `\n\n${hashes} ${content}\n\n`;
+                    }
+
+                    // 段落
+                    case 'p': {
+                        const content = children.map(child => walk(child, context)).join('').trim();
+                        if (!content) return '';
+                        return `\n\n${content}\n\n`;
+                    }
+
+                    // 改行
+                    case 'br':
+                        return '  \n';
+
+                    // 太字
+                    case 'b':
+                    case 'strong': {
+                        const content = childMd().trim();
+                        return content ? `**${content}**` : '';
+                    }
+
+                    // 斜体
+                    case 'i':
+                    case 'em': {
+                        const content = childMd().trim();
+                        return content ? `*${content}*` : '';
+                    }
+
+                    // インラインコード
+                    case 'code': {
+                        if (context.inCodeBlock) {
+                            return node.textContent;
+                        }
+                        const content = node.textContent.trim();
+                        return content ? '`' + content.replace(/`/g, '\\`') + '`' : '';
+                    }
+
+                    // コードブロック
+                    case 'pre': {
+                        const codeNode = children.find(
+                            c => c.nodeType === Node.ELEMENT_NODE && c.tagName.toLowerCase() === 'code'
+                        );
+                        let codeText;
+                        if (codeNode) {
+                            codeText = codeNode.textContent;
+                        } else {
+                            codeText = node.textContent;
+                        }
+                        codeText = codeText.replace(/\n+$/, '');
+                        return `\n\n\`\`\`\n${codeText}\n\`\`\`\n\n`;
+                    }
+
+                    // 箇条書き
+                    case 'ul': {
+                        const items = children
+                            .filter(c => c.nodeType === Node.ELEMENT_NODE && c.tagName.toLowerCase() === 'li')
+                            .map(li => walk(li, { ...context, listType: 'ul' }))
+                            .join('');
+                        return `\n${items}\n`;
+                    }
+
+                    case 'ol': {
+                        let index = 1;
+                        const items = children
+                            .filter(c => c.nodeType === Node.ELEMENT_NODE && c.tagName.toLowerCase() === 'li')
+                            .map(li => {
+                                const content = walk(li, { ...context, listType: 'ol', listIndex: index });
+                                index++;
+                                return content;
+                            })
+                            .join('');
+                        return `\n${items}\n`;
+                    }
+
+                    case 'li': {
+                        const content = children.map(child => walk(child, context)).join('').trim();
+                        if (!content) return '';
+                        if (context.listType === 'ol') {
+                            const num = context.listIndex ?? 1;
+                            return `${num}. ${content}\n`;
+                        }
+                        return `- ${content}\n`;
+                    }
+
+                    // リンク
+                    case 'a': {
+                        const href = node.getAttribute('href') || '';
+                        const content = childMd().trim() || href;
+                        if (!href) return content;
+                        return `[${content}](${href})`;
+                    }
+
+                    // 水平線
+                    case 'hr':
+                        return `\n\n---\n\n`;
+
+                    // 画像
+                    case 'img': {
+                        const alt = node.getAttribute('alt') || '';
+                        const src = node.getAttribute('src') || '';
+                        if (!src) return '';
+                        return `![${alt}](${src})`;
+                    }
+
+                    default:
+                        return childMd();
+                }
+            }
+
+            md = walk(root).trim();
+            md = md.replace(/\n{3,}/g, '\n\n');
+            return md;
+        }
+
+        const inputEl = document.getElementById('input');
+        const outputEl = document.getElementById('output');
+        const convertBtn = document.getElementById('convertBtn');
+        const copyBtn = document.getElementById('copyBtn');
+
+        convertBtn.addEventListener('click', () => {
+            const html = inputEl.value || '';
+            outputEl.value = html ? htmlToMarkdown(html) : '';
+        });
+
+        copyBtn.addEventListener('click', async () => {
+            const text = outputEl.value;
+            if (!text) return;
+            try {
+                await navigator.clipboard.writeText(text);
+                copyBtn.textContent = 'コピーしました';
+                setTimeout(() => {
+                    copyBtn.textContent = 'Markdown をコピー';
+                }, 1200);
+            } catch (e) {
+                alert('クリップボードへのコピーに失敗しました。');
+            }
+        });
+    </script>
+</body>
+
+</html>
