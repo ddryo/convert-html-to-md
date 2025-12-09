@@ -2,6 +2,8 @@
 
 HTML を Markdown に変換するシンプルな Web ツールです。
 
+🌐 **公開URL**: https://ddryo.github.io/convert-html-to-md/
+
 ## 機能
 
 - HTML を Markdown 形式に変換
@@ -12,7 +14,7 @@ HTML を Markdown に変換するシンプルな Web ツールです。
 
 ## 使い方
 
-1. `index.html` をブラウザで開く
+1. [公開サイト](https://ddryo.github.io/convert-html-to-md/)にアクセスするか、`index.html` をブラウザで開く
 2. 左側のテキストエリアに HTML を貼り付ける
 3. 「変換する」ボタンをクリック
 4. 右側に Markdown 形式で変換結果が表示される
